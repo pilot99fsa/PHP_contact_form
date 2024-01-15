@@ -41,20 +41,37 @@
   if ( $errmessage ) {
     $mode = 'input';
    } else {
+    // CSRF(クロスサイトリクエストフォージェリ)の対策の処理
+    $token = bin2hex(random_bytes(length:32)); // PHP7の場合はrandom_bytes関数を使う
+    // $token = bin2hex(mcrypt_create_iv(length:32, source: MCRYPT_DEV_URANDOM)); PHP5の場合はこちらを使う
+    $_SESSION['token'] = $token; //トークンを生成して$_SESSION['token']に保存する
     $mode = 'confirm';
    }
     
   } else if( isset( $_POST['send']) && $_POST['send']) {
     // 送信ボタンを押した時の処理を記述
-    $message  = "お問い合わせを受け付けました \r\n"
-              . "名前: " . $_SESSION['fullname'] . "\r\n"
-              . "email: " . $_SESSION['email'] . "\r\n"
-              . "お問い合わせ内容:\r\n"
-              . preg_replace("/\r\n|\r|\n/", "\r\n", $_SESSION['message']);
-    mail($_SESSION['email'],'お問い合わせありがとうございます',$message);
-    mail('*****@*****.*****','お問い合わせありがとうございます',$message); //任意のメールアドレスを設定する
-    $_SESSION = array();
-    $mode = 'send';
+
+    // 入力された情報が取得できなかった場合や、サーバーに情報がなかった場合のエラー処理
+    if(!$_POST['token'] || !$_SESSION['email'] || !$_SESSION['email'] ) {
+      $errmessage[] = '不正な処理が行われました';
+      $_SESSION     = array(); //セッション情報も念の為に消去する
+      $mode         = 'input'; // 入力画面に強制的に遷移させる
+    // トークンが一致しているか確認するための処理
+    } else if( $_POST['token'] != $_SESSION['token']) { // 「!」は「一致していなければ」を意味する判定記号
+      $errmessage[] = '不正な処理が行われました';
+      $_SESSION     = array(); 
+      $mode         = 'input'; 
+    } else {
+      $message  = "お問い合わせを受け付けました \r\n"
+      . "名前: " . $_SESSION['fullname'] . "\r\n"
+      . "email: " . $_SESSION['email'] . "\r\n"
+      . "お問い合わせ内容:\r\n"
+      . preg_replace("/\r\n|\r|\n/", "\r\n", $_SESSION['message']);
+mail($_SESSION['email'],'お問い合わせありがとうございます',$message);
+mail('*****@*****.*****','お問い合わせありがとうございます',$message); //任意のメールアドレスを設定する
+$_SESSION = array();
+$mode = 'send';
+    }
   } else {
     // セッションを初期化するコード。お問い合わせを送信後はセッションをクリアにする。セッションはいつまでも残しておくとセキュリティ上のリスクとなる
     $_SESSION['fullname'] = "";
@@ -96,6 +113,7 @@
 
         <!-- 確認の画面 -->
         <form action="./contactform.php" method="post">
+            <input type= "hidden" name="token" value="<?php echo $_SESSION['token']; ?>">
             名前<?php echo $_SESSION['fullname'] ?><br>
             Eメール<?php echo $_SESSION['email'] ?><br>
             お問い合わせ内容<br>
